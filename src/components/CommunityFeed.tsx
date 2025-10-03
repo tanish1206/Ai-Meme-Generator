@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Heart, Flame, Laugh, Sparkles, Download, Share2 } from 'lucide-react';
 import Card from './Card';
 import Button from './Button';
+import { supabase, isSupabaseConfigured, MemeRow } from '../utils/supabase';
 
 interface Meme {
   id: string;
@@ -18,39 +19,53 @@ interface Meme {
   };
 }
 
-const sampleMemes: Meme[] = [
-  {
-    id: '1',
-    imageUrl: 'https://i.imgflip.com/30b1gx.jpg',
-    topText: 'READING DOCUMENTATION',
-    bottomText: 'JUST TRYING RANDOM CODE UNTIL IT WORKS',
-    author: 'DevMemer',
-    timestamp: new Date(Date.now() - 1000 * 60 * 30),
-    reactions: { laugh: 342, fire: 128, heart: 89, wow: 45 }
-  },
-  {
-    id: '2',
-    imageUrl: 'https://i.imgflip.com/1ur9b0.jpg',
-    topText: 'WHEN YOUR CODE WORKS',
-    bottomText: 'BUT YOU DON\'T KNOW WHY',
-    author: 'CodeNinja',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2),
-    reactions: { laugh: 521, fire: 234, heart: 156, wow: 78 }
-  },
-  {
-    id: '3',
-    imageUrl: 'https://i.imgflip.com/1jwhww.jpg',
-    topText: 'JUNIOR DEV',
-    bottomText: 'SENIOR DEV WHO COPIES FROM STACK OVERFLOW',
-    author: 'StackOverflow99',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 5),
-    reactions: { laugh: 689, fire: 345, heart: 234, wow: 123 }
-  }
-];
+const PAGE_SIZE = 6;
 
 const CommunityFeed = () => {
-  const [memes] = useState<Meme[]>(sampleMemes);
+  const [memes, setMemes] = useState<Meme[]>([]);
   const [userReactions, setUserReactions] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string>('');
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) return;
+    // initial load
+    void fetchPage(0, true);
+  }, []);
+
+  const fetchPage = async (pageIndex: number, replace = false) => {
+    if (!supabase) return;
+    setLoading(true);
+    setError('');
+    try {
+      const from = pageIndex * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+      const { data, error: dbError } = await supabase
+        .from('memes')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(from, to);
+      if (dbError) throw dbError;
+      const mapped: Meme[] = (data as MemeRow[]).map((row) => ({
+        id: row.id,
+        imageUrl: row.image_url,
+        topText: row.top_text ?? '',
+        bottomText: row.bottom_text ?? '',
+        author: 'Anonymous',
+        timestamp: new Date(row.created_at),
+        reactions: { laugh: row.reactions_count ?? 0, fire: 0, heart: 0, wow: 0 }
+      }));
+      setMemes((prev) => (replace ? mapped : [...prev, ...mapped]));
+      setHasMore((data?.length ?? 0) === PAGE_SIZE);
+      setPage(pageIndex);
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to load feed');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleReaction = (memeId: string, reactionType: string) => {
     setUserReactions((prev) => ({
@@ -162,12 +177,29 @@ const CommunityFeed = () => {
             </div>
           </Card>
         ))}
+        {loading && (
+          <Card className="p-6 text-center text-gray-400">Loading…</Card>
+        )}
+        {error && (
+          <Card className="p-6 text-center text-red-400">{error}</Card>
+        )}
       </div>
 
-      <div className="text-center py-8">
-        <p className="text-gray-500 mb-4">That's all for now!</p>
-        <Button variant="outline">Load More Memes</Button>
-      </div>
+      {isSupabaseConfigured && (
+        <div className="text-center py-8">
+          {!hasMore ? (
+            <p className="text-gray-500">That's all for now!</p>
+          ) : (
+            <Button
+              variant="outline"
+              disabled={loading}
+              onClick={() => fetchPage(page + 1)}
+            >
+              {loading ? 'Loading…' : 'Load More Memes'}
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 };

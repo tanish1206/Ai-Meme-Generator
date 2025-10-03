@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Shuffle, Download, Share2, Sparkles } from 'lucide-react';
 import { memeTemplates, getRandomTemplate, MemeTemplate } from '../data/memeTemplates';
-import { generateMeme } from '../utils/memeGenerator';
+import { generateMeme, generateMemeBlob } from '../utils/memeGenerator';
+import { supabase, isSupabaseConfigured } from '../utils/supabase';
 import Button from './Button';
 import Card from './Card';
 import Input from './Input';
@@ -15,6 +16,8 @@ const MemeGenerator = ({ onMemeGenerated }: MemeGeneratorProps) => {
   const [topText, setTopText] = useState('');
   const [bottomText, setBottomText] = useState('');
   const [generatedMeme, setGeneratedMeme] = useState<string>('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState(false);
 
   const handleRandomTemplate = () => {
@@ -67,6 +70,41 @@ const MemeGenerator = ({ onMemeGenerated }: MemeGeneratorProps) => {
       }
     } catch (error) {
       console.error('Error sharing:', error);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!generatedMeme || !isSupabaseConfigured || !supabase) return;
+    setIsSaving(true);
+    setErrorMsg('');
+    try {
+      const blob = await generateMemeBlob(selectedTemplate, topText, bottomText);
+      const fileName = `memes/${Date.now()}-${selectedTemplate.id}.png`;
+      const { data: storageData, error: storageError } = await supabase
+        .storage
+        .from('Public')
+        .upload(fileName, blob, { contentType: 'image/png', upsert: false });
+      if (storageError) throw storageError;
+
+      const { data: urlData } = supabase
+        .storage
+        .from('Public')
+        .getPublicUrl(storageData.path);
+
+      const { error: insertError } = await supabase
+        .from('memes')
+        .insert({
+          image_url: urlData.publicUrl,
+          top_text: topText,
+          bottom_text: bottomText
+        });
+      if (insertError) throw insertError;
+      alert('Saved to community!');
+    } catch (e: any) {
+      console.error(e);
+      setErrorMsg(e.message ?? 'Failed to save meme');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -173,6 +211,9 @@ const MemeGenerator = ({ onMemeGenerated }: MemeGeneratorProps) => {
                   </>
                 )}
               </Button>
+              {errorMsg && (
+                <p className="text-red-400 text-sm">{errorMsg}</p>
+              )}
             </div>
           </Card>
         </div>
@@ -219,7 +260,21 @@ const MemeGenerator = ({ onMemeGenerated }: MemeGeneratorProps) => {
                   <Share2 className="w-4 h-4 mr-2" />
                   Share
                 </Button>
+                <Button
+                  onClick={handleSave}
+                  variant="primary"
+                  className="flex-1"
+                  disabled={isSaving || !isSupabaseConfigured}
+                  title={isSupabaseConfigured ? '' : 'Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env and restart'}
+                >
+                  {isSaving ? 'Saving…' : 'Save to Community'}
+                </Button>
               </div>
+            )}
+            {!isSupabaseConfigured && generatedMeme && (
+              <p className="text-xs text-gray-400 mt-2">
+                To enable saving, create an .env with VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, then restart the dev server.
+              </p>
             )}
           </Card>
         </div>

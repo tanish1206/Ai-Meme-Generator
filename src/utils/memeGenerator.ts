@@ -5,10 +5,33 @@ export const generateMeme = async (
   topText: string,
   bottomText: string
 ): Promise<string> => {
-  return new Promise((resolve) => {
+  const { canvas } = await renderMemeToCanvas(template, topText, bottomText);
+  return canvas.toDataURL('image/png');
+};
+
+export const generateMemeBlob = async (
+  template: MemeTemplate,
+  topText: string,
+  bottomText: string
+): Promise<Blob> => {
+  const { canvas } = await renderMemeToCanvas(template, topText, bottomText);
+  return await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error('Failed to create blob'));
+    }, 'image/png', 0.92);
+  });
+};
+
+const renderMemeToCanvas = async (
+  template: MemeTemplate,
+  topText: string,
+  bottomText: string
+): Promise<{ canvas: HTMLCanvasElement }> => {
+  return new Promise((resolve, reject) => {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!ctx) return reject(new Error('No 2D context'));
 
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -46,9 +69,10 @@ export const generateMeme = async (
         });
       }
 
-      resolve(canvas.toDataURL('image/png'));
+      resolve({ canvas });
     };
 
+    img.onerror = () => reject(new Error('Failed to load template image'));
     img.src = template.imageUrl;
   });
 };
