@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Shuffle, Download, Share2, Sparkles } from 'lucide-react';
 import { memeTemplates, getRandomTemplate, MemeTemplate } from '../data/memeTemplates';
-import { generateMeme, generateMemeBlob } from '../utils/memeGenerator';
+import { generateMeme, generateMemeBlob, generateMemeFromSource, generateMemeBlobFromSource, TextStyleOptions, TextPositionOptions } from '../utils/memeGenerator';
 import { supabase, isSupabaseConfigured } from '../utils/supabase';
 import Button from './Button';
 import Card from './Card';
 import Input from './Input';
+import { recordMemeCreated } from '../utils/engagement';
+import { generateStoryFromSource } from '../utils/memeGenerator';
 
 interface MemeGeneratorProps {
   onMemeGenerated?: (memeUrl: string) => void;
@@ -18,12 +20,39 @@ const MemeGenerator = ({ onMemeGenerated }: MemeGeneratorProps) => {
   const [generatedMeme, setGeneratedMeme] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [style, setStyle] = useState<TextStyleOptions>({ fontScale: 1, strokeWidth: 3, fillColor: 'white', strokeColor: 'black', align: 'center', shadow: false });
+  const [positions, setPositions] = useState<TextPositionOptions | undefined>(undefined);
+  const [dragging, setDragging] = useState<{ target: 'top' | 'bottom' | null; startX: number; startY: number } | null>(null);
+  const [uploadPreviewUrl, setUploadPreviewUrl] = useState<string>('');
+  const [templateQuery, setTemplateQuery] = useState('');
+
+  useEffect(() => {
+    const payloadRaw = localStorage.getItem('memegen_remix_payload');
+    if (payloadRaw) {
+      try {
+        const payload = JSON.parse(payloadRaw) as { imageUrl?: string; topText?: string; bottomText?: string };
+        if (payload.topText) setTopText(payload.topText);
+        if (payload.bottomText) setBottomText(payload.bottomText);
+        if (payload.imageUrl) {
+          // Prefill preview with the source image; we won't have a File, but it's fine for generating
+          setGeneratedMeme('');
+          setUploadFile(null);
+          setUploadPreviewUrl(payload.imageUrl);
+        }
+      } catch {}
+      localStorage.removeItem('memegen_remix_payload');
+    }
+  }, []);
 
   const handleRandomTemplate = () => {
     const randomTemplate = getRandomTemplate();
     setSelectedTemplate(randomTemplate);
     setGeneratedMeme('');
+    if (uploadPreviewUrl) URL.revokeObjectURL(uploadPreviewUrl);
+    setUploadPreviewUrl('');
+    setUploadFile(null);
   };
 
   const handleGenerate = async () => {
@@ -31,11 +60,15 @@ const MemeGenerator = ({ onMemeGenerated }: MemeGeneratorProps) => {
 
     setIsGenerating(true);
     try {
-      const memeUrl = await generateMeme(selectedTemplate, topText, bottomText);
+      const memeUrl = uploadFile
+        ? await generateMemeFromSource(uploadFile, topText, bottomText, style, positions)
+        : await generateMeme(selectedTemplate, topText, bottomText, style, positions);
       setGeneratedMeme(memeUrl);
       if (onMemeGenerated) {
         onMemeGenerated(memeUrl);
       }
+      // record engagement locally
+      recordMemeCreated();
     } catch (error) {
       console.error('Error generating meme:', error);
     } finally {
@@ -78,7 +111,9 @@ const MemeGenerator = ({ onMemeGenerated }: MemeGeneratorProps) => {
     setIsSaving(true);
     setErrorMsg('');
     try {
-      const blob = await generateMemeBlob(selectedTemplate, topText, bottomText);
+      const blob = uploadFile
+        ? await generateMemeBlobFromSource(uploadFile, topText, bottomText, style, positions)
+        : await generateMemeBlob(selectedTemplate, topText, bottomText, style, positions);
       const fileName = `memes/${Date.now()}-${selectedTemplate.id}.png`;
       const { data: storageData, error: storageError } = await supabase
         .storage
@@ -139,13 +174,24 @@ const MemeGenerator = ({ onMemeGenerated }: MemeGeneratorProps) => {
               Choose Template
             </h3>
 
+            <Input
+              placeholder="Search templates..."
+              value={templateQuery}
+              onChange={(e) => setTemplateQuery(e.target.value)}
+              className="mb-3"
+            />
             <div className="grid grid-cols-2 gap-3 mb-4 max-h-96 overflow-y-auto pr-2">
-              {memeTemplates.map((template) => (
+              {memeTemplates
+                .filter((t) => t.name.toLowerCase().includes(templateQuery.toLowerCase()))
+                .map((template) => (
                 <button
                   key={template.id}
                   onClick={() => {
                     setSelectedTemplate(template);
                     setGeneratedMeme('');
+                    if (uploadPreviewUrl) URL.revokeObjectURL(uploadPreviewUrl);
+                    setUploadPreviewUrl('');
+                    setUploadFile(null);
                   }}
                   className={`relative rounded-lg overflow-hidden transition-all duration-300 ${
                     selectedTemplate.id === template.id
@@ -192,6 +238,95 @@ const MemeGenerator = ({ onMemeGenerated }: MemeGeneratorProps) => {
                 onChange={(e) => setBottomText(e.target.value)}
                 maxLength={100}
               />
+              <div>
+                <label className="text-sm text-gray-400">Or upload your own image</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="mt-2 block w-full text-sm text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-500"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] ?? null;
+                    setGeneratedMeme('');
+                    if (uploadPreviewUrl) URL.revokeObjectURL(uploadPreviewUrl);
+                    setUploadPreviewUrl('');
+                    setUploadFile(f);
+                    if (f) {
+                      const url = URL.createObjectURL(f);
+                      setUploadPreviewUrl(url);
+                    }
+                  }}
+                />
+                {uploadFile && (
+                  <p className="text-xs text-gray-400 mt-1">Selected: {uploadFile.name}</p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <div>
+                  <label className="text-sm text-gray-400">Font size</label>
+                  <input
+                    type="range"
+                    min={0.5}
+                    max={2}
+                    step={0.1}
+                    value={style.fontScale ?? 1}
+                    onChange={(e) => setStyle((s) => ({ ...s, fontScale: parseFloat(e.target.value) }))}
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-400">Stroke width</label>
+                  <input
+                    type="range"
+                    min={0}
+                    max={10}
+                    step={1}
+                    value={style.strokeWidth ?? 3}
+                    onChange={(e) => setStyle((s) => ({ ...s, strokeWidth: parseInt(e.target.value) }))}
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-400">Fill color</label>
+                  <input
+                    type="color"
+                    value={style.fillColor ?? '#ffffff'}
+                    onChange={(e) => setStyle((s) => ({ ...s, fillColor: e.target.value }))}
+                    className="w-full h-10 bg-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-400">Stroke color</label>
+                  <input
+                    type="color"
+                    value={style.strokeColor ?? '#000000'}
+                    onChange={(e) => setStyle((s) => ({ ...s, strokeColor: e.target.value }))}
+                    className="w-full h-10 bg-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-400">Align</label>
+                  <select
+                    value={style.align ?? 'center'}
+                    onChange={(e) => setStyle((s) => ({ ...s, align: e.target.value as any }))}
+                    className="w-full bg-gray-900 border border-gray-800 rounded-md px-3 py-2 text-sm"
+                  >
+                    <option value="left">Left</option>
+                    <option value="center">Center</option>
+                    <option value="right">Right</option>
+                  </select>
+                </div>
+                <div className="flex items-end">
+                  <label className="inline-flex items-center gap-2 text-sm text-gray-400">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(style.shadow)}
+                      onChange={(e) => setStyle((s) => ({ ...s, shadow: e.target.checked }))}
+                    />
+                    Shadow
+                  </label>
+                </div>
+              </div>
               <Button
                 onClick={handleGenerate}
                 variant="secondary"
@@ -211,6 +346,15 @@ const MemeGenerator = ({ onMemeGenerated }: MemeGeneratorProps) => {
                   </>
                 )}
               </Button>
+              <Card className="p-3">
+                <h4 className="font-semibold mb-2 text-sm flex items-center gap-2"><Sparkles className="w-4 h-4 text-purple-500"/> AI Meme Coach</h4>
+                <ul className="list-disc list-inside text-sm text-gray-400 space-y-1">
+                  <li>Try a stronger contrast: increase stroke width or enable shadow.</li>
+                  <li>Shorter lines are punchier. Consider splitting long text into two lines.</li>
+                  <li>Template mismatch? Use the search to find a meme that fits your joke.</li>
+                  <li>Position matters: drag the Top/Bottom handles away from busy backgrounds.</li>
+                </ul>
+              </Card>
               {errorMsg && (
                 <p className="text-red-400 text-sm">{errorMsg}</p>
               )}
@@ -221,12 +365,22 @@ const MemeGenerator = ({ onMemeGenerated }: MemeGeneratorProps) => {
         <div className="space-y-6">
           <Card className="sticky top-24">
             <h3 className="text-xl font-semibold mb-4">Preview</h3>
-            <div className="relative bg-gray-900 rounded-lg overflow-hidden aspect-square flex items-center justify-center">
+            <div
+              className="relative bg-gray-900 rounded-lg overflow-hidden aspect-square flex items-center justify-center select-none"
+              onMouseUp={() => setDragging(null)}
+              onMouseLeave={() => setDragging(null)}
+            >
               {generatedMeme ? (
                 <img
                   src={generatedMeme}
                   alt="Generated meme"
                   className="w-full h-full object-contain"
+                />
+              ) : uploadPreviewUrl ? (
+                <img
+                  src={uploadPreviewUrl}
+                  alt="Upload preview"
+                  className="w-full h-full object-contain opacity-80"
                 />
               ) : (
                 <div className="text-center space-y-4 p-8">
@@ -239,6 +393,53 @@ const MemeGenerator = ({ onMemeGenerated }: MemeGeneratorProps) => {
                     Your meme will appear here
                   </p>
                 </div>
+              )}
+              {!generatedMeme && (
+                <>
+                  {/* draggable handles overlay for top/bottom text */}
+                  <div
+                    className="absolute"
+                    style={{
+                      left: `${(positions?.top?.xPct ?? (selectedTemplate.topText.x / 700)) * 100}%`,
+                      top: `${(positions?.top?.yPct ?? (selectedTemplate.topText.y / 700)) * 100}%`,
+                      transform: 'translate(-50%, 0)'
+                    }}
+                    onMouseDown={(e) => setDragging({ target: 'top', startX: e.clientX, startY: e.clientY })}
+                  >
+                    <span className="px-2 py-1 rounded bg-purple-600/70 text-xs">Top</span>
+                  </div>
+                  <div
+                    className="absolute"
+                    style={{
+                      left: `${(positions?.bottom?.xPct ?? (selectedTemplate.bottomText.x / 700)) * 100}%`,
+                      top: `${(positions?.bottom?.yPct ?? (selectedTemplate.bottomText.y / 700)) * 100}%`,
+                      transform: 'translate(-50%, 0)'
+                    }}
+                    onMouseDown={(e) => setDragging({ target: 'bottom', startX: e.clientX, startY: e.clientY })}
+                  >
+                    <span className="px-2 py-1 rounded bg-purple-600/70 text-xs">Bottom</span>
+                  </div>
+                </>
+              )}
+              {!generatedMeme && dragging && (
+                <div
+                  className="absolute inset-0"
+                  onMouseMove={(e) => {
+                    // calculate relative position within container
+                    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+                    const xPct = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+                    const yPct = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
+                    setPositions((prev) => {
+                      const next = { ...(prev || {}) } as any;
+                      if (dragging.target === 'top') {
+                        next.top = { xPct, yPct, maxWidthPct: prev?.top?.maxWidthPct ?? 0.8 };
+                      } else if (dragging.target === 'bottom') {
+                        next.bottom = { xPct, yPct, maxWidthPct: prev?.bottom?.maxWidthPct ?? 0.8 };
+                      }
+                      return next;
+                    });
+                  }}
+                />
               )}
             </div>
 
@@ -259,6 +460,26 @@ const MemeGenerator = ({ onMemeGenerated }: MemeGeneratorProps) => {
                 >
                   <Share2 className="w-4 h-4 mr-2" />
                   Share
+                </Button>
+                <Button
+                  onClick={async () => {
+                    try {
+                      const source = uploadFile || (selectedTemplate.imageUrl as any);
+                      const blob = await generateStoryFromSource(source, topText, bottomText, style);
+                      const url = URL.createObjectURL(blob);
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.download = `meme-story-${Date.now()}.png`;
+                      link.click();
+                      URL.revokeObjectURL(url);
+                    } catch (e) {
+                      console.error('Failed to export story', e);
+                    }
+                  }}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  Story 1080x1920
                 </Button>
                 <Button
                   onClick={handleSave}

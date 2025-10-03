@@ -1,11 +1,13 @@
 import { User, Image, Trophy, Calendar } from 'lucide-react';
 import Card from './Card';
 import Button from './Button';
+import { getEngagement } from '../utils/engagement';
 
 const ProfilePage = () => {
+  const engagement = getEngagement();
   const stats = [
-    { label: 'Memes Created', value: '42', icon: Image },
-    { label: 'Total Reactions', value: '1.2K', icon: Trophy },
+    { label: 'Memes Created', value: String(engagement.totalCreated), icon: Image },
+    { label: 'Current Streak', value: `${engagement.currentStreakDays} days`, icon: Trophy },
     { label: 'Member Since', value: 'Oct 2025', icon: Calendar }
   ];
 
@@ -98,6 +100,19 @@ const ProfilePage = () => {
           ))}
         </div>
       </div>
+
+      <Card className="p-6">
+        <h3 className="text-xl font-semibold mb-3">Badges</h3>
+        {engagement.badges.length === 0 ? (
+          <p className="text-gray-500 text-sm">No badges yet. Keep creating memes to unlock badges like "Made memes 5 days in a row!" and "Certified Dank Lord 🌌".</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {engagement.badges.map((b, i) => (
+              <span key={i} className="px-3 py-1 rounded-full bg-purple-600/20 text-purple-300 text-sm border border-purple-600/30">{b}</span>
+            ))}
+          </div>
+        )}
+      </Card>
 
       <Card className="p-8 text-center space-y-4 bg-gradient-to-br from-purple-900/30 via-pink-900/20 to-green-900/30 border-2 border-purple-500/20">
         <Trophy className="w-12 h-12 mx-auto text-yellow-400" />
