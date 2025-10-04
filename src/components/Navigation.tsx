@@ -1,8 +1,8 @@
-import { Home, Wand2, Users, User } from 'lucide-react';
+import { Home, Wand2, Users, User, Trophy } from 'lucide-react';
 
 interface NavigationProps {
-  activeTab: 'home' | 'generate' | 'community' | 'profile';
-  onTabChange: (tab: 'home' | 'generate' | 'community' | 'profile') => void;
+  activeTab: 'home' | 'generate' | 'community' | 'profile' | 'challenges';
+  onTabChange: (tab: 'home' | 'generate' | 'community' | 'profile' | 'challenges') => void;
 }
 
 const Navigation = ({ activeTab, onTabChange }: NavigationProps) => {
@@ -10,6 +10,7 @@ const Navigation = ({ activeTab, onTabChange }: NavigationProps) => {
     { id: 'home', label: 'Home', icon: Home },
     { id: 'generate', label: 'Generate', icon: Wand2 },
     { id: 'community', label: 'Community', icon: Users },
+    { id: 'challenges', label: 'Challenges', icon: Trophy },
     { id: 'profile', label: 'Profile', icon: User }
   ] as const;
 

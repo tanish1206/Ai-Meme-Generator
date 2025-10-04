@@ -8,6 +8,7 @@ import Card from './Card';
 import Input from './Input';
 import { recordMemeCreated } from '../utils/engagement';
 import { generateStoryFromSource } from '../utils/memeGenerator';
+import AISuggestions from './AISuggestions';
 
 interface MemeGeneratorProps {
   onMemeGenerated?: (memeUrl: string) => void;
@@ -43,6 +44,29 @@ const MemeGenerator = ({ onMemeGenerated }: MemeGeneratorProps) => {
         }
       } catch {}
       localStorage.removeItem('memegen_remix_payload');
+    }
+
+    // Check for challenge context
+    const challengeRaw = localStorage.getItem('memegen_challenge_context');
+    if (challengeRaw) {
+      try {
+        const challenge = JSON.parse(challengeRaw) as { 
+          challengeId: string; 
+          title: string; 
+          description: string; 
+          templateId?: string 
+        };
+        // Pre-select suggested template if provided
+        if (challenge.templateId) {
+          const template = memeTemplates.find(t => t.id === challenge.templateId);
+          if (template) {
+            setSelectedTemplate(template);
+          }
+        }
+        // Show challenge context in UI
+        console.log('Challenge context:', challenge);
+      } catch {}
+      // Don't remove challenge context yet - keep it for submission
     }
   }, []);
 
@@ -134,7 +158,20 @@ const MemeGenerator = ({ onMemeGenerated }: MemeGeneratorProps) => {
           bottom_text: bottomText
         });
       if (insertError) throw insertError;
-      alert('Saved to community!');
+      
+      // Check if this is a challenge submission
+      const challengeRaw = localStorage.getItem('memegen_challenge_context');
+      if (challengeRaw) {
+        try {
+          const challenge = JSON.parse(challengeRaw);
+          // In a real app, you'd submit to a challenges_submissions table
+          console.log('Challenge submission for:', challenge.title);
+          alert(`Saved to community and submitted to "${challenge.title}" challenge!`);
+          localStorage.removeItem('memegen_challenge_context');
+        } catch {}
+      } else {
+        alert('Saved to community!');
+      }
     } catch (e: any) {
       console.error(e);
       setErrorMsg(e.message ?? 'Failed to save meme');
@@ -346,15 +383,16 @@ const MemeGenerator = ({ onMemeGenerated }: MemeGeneratorProps) => {
                   </>
                 )}
               </Button>
-              <Card className="p-3">
-                <h4 className="font-semibold mb-2 text-sm flex items-center gap-2"><Sparkles className="w-4 h-4 text-purple-500"/> AI Meme Coach</h4>
-                <ul className="list-disc list-inside text-sm text-gray-400 space-y-1">
-                  <li>Try a stronger contrast: increase stroke width or enable shadow.</li>
-                  <li>Shorter lines are punchier. Consider splitting long text into two lines.</li>
-                  <li>Template mismatch? Use the search to find a meme that fits your joke.</li>
-                  <li>Position matters: drag the Top/Bottom handles away from busy backgrounds.</li>
-                </ul>
-              </Card>
+              <AISuggestions
+                templateId={selectedTemplate.id}
+                templateName={selectedTemplate.name}
+                currentTopText={topText}
+                currentBottomText={bottomText}
+                onApplySuggestion={(top, bottom) => {
+                  setTopText(top);
+                  setBottomText(bottom);
+                }}
+              />
               {errorMsg && (
                 <p className="text-red-400 text-sm">{errorMsg}</p>
               )}

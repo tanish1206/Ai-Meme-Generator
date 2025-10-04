@@ -5,15 +5,23 @@ import HomePage from './components/HomePage';
 import MemeGenerator from './components/MemeGenerator';
 import CommunityFeed from './components/CommunityFeed';
 import ProfilePage from './components/ProfilePage';
+import ChallengesPage from './components/ChallengesPage';
+import MemePage from './components/MemePage';
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'home' | 'generate' | 'community' | 'profile'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'generate' | 'community' | 'profile' | 'challenges' | 'meme'>('home');
+  const [memeId, setMemeId] = useState<string>('');
 
   useEffect(() => {
     const applyHash = () => {
       const hash = window.location.hash.replace('#', '');
-      if (hash === 'generate' || hash === 'community' || hash === 'profile' || hash === 'home') {
+      if (hash === 'generate' || hash === 'community' || hash === 'profile' || hash === 'home' || hash === 'challenges') {
         setActiveTab(hash as any);
+        setMemeId('');
+      } else if (hash.startsWith('meme/')) {
+        const id = hash.replace('meme/', '');
+        setActiveTab('meme');
+        setMemeId(id);
       }
     };
     applyHash();
@@ -31,6 +39,10 @@ function App() {
         return <CommunityFeed />;
       case 'profile':
         return <ProfilePage />;
+      case 'challenges':
+        return <ChallengesPage />;
+      case 'meme':
+        return <MemePage memeId={memeId} onBack={() => { setActiveTab('community'); window.location.hash = 'community'; }} />;
       default:
         return <HomePage onNavigate={(tab) => { setActiveTab(tab); window.location.hash = tab; }} />;
     }

@@ -334,7 +334,25 @@ const CommunityFeed = () => {
                 <button className="p-2 rounded-full bg-gray-800 hover:bg-gray-700 transition-colors">
                   <Download className="w-4 h-4 text-gray-400" />
                 </button>
-                <button className="p-2 rounded-full bg-gray-800 hover:bg-gray-700 transition-colors">
+                <button 
+                  className="p-2 rounded-full bg-gray-800 hover:bg-gray-700 transition-colors"
+                  onClick={() => {
+                    const url = `${window.location.origin}${window.location.pathname}#meme/${meme.id}`;
+                    if (navigator.share) {
+                      navigator.share({
+                        title: 'Check out this meme!',
+                        text: 'Made with MemeGen',
+                        url: url
+                      }).catch(() => {
+                        navigator.clipboard.writeText(url);
+                        alert('Link copied to clipboard!');
+                      });
+                    } else {
+                      navigator.clipboard.writeText(url);
+                      alert('Link copied to clipboard!');
+                    }
+                  }}
+                >
                   <Share2 className="w-4 h-4 text-gray-400" />
                 </button>
                 <button
