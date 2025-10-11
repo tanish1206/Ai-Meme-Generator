@@ -73,7 +73,11 @@ function App() {
       <div className="relative z-10">
         <Navigation activeTab={activeTab} onTabChange={(tab) => { setActiveTab(tab); window.location.hash = tab; }} />
 
-        <main className="pb-24 md:pb-8">
+        <main className="pb-24 md:pb-8" style={{ 
+          scrollBehavior: 'smooth',
+          WebkitOverflowScrolling: 'touch',
+          transform: 'translateZ(0)' // Force hardware acceleration
+        }}>
           {renderContent()}
         </main>
       </div>

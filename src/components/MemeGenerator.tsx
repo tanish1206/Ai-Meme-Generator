@@ -251,12 +251,15 @@ const MemeGenerator = ({ onMemeGenerated }: MemeGeneratorProps) => {
 
   return (
     <div className="w-full max-w-6xl mx-auto px-4 py-8 space-y-8">
-      <div className="text-center space-y-4">
-        <h2 className="text-4xl md:text-5xl font-bold text-gradient">
-          Create Your Meme
-        </h2>
-        <p className="text-gray-400 text-lg">
-          Pick a template, add your genius text, and let the magic happen
+      <div className="text-center space-y-6">
+        <div className="relative">
+          <h2 className="text-5xl md:text-6xl font-bold bg-gradient-to-r from-purple-400 via-pink-500 to-red-500 bg-clip-text text-transparent animate-pulse">
+            Meme Studio
+          </h2>
+          <div className="absolute -top-2 -right-2 w-4 h-4 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full animate-bounce"></div>
+        </div>
+        <p className="text-gray-300 text-xl font-medium max-w-2xl mx-auto leading-relaxed">
+          🎨 Pick a template, add your genius text, and let the magic happen ✨
         </p>
       </div>
 

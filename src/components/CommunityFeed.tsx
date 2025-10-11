@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Heart, Flame, Laugh, Sparkles, Download, Share2, Wand2, Wifi, WifiOff } from 'lucide-react';
+import { Heart, Flame, Laugh, Sparkles, Download, Share2, Wand2, Wifi, WifiOff, Grid3X3, List } from 'lucide-react';
 import Card from './Card';
 import Button from './Button';
+import Masonry from './Masonry';
 import { supabase, isSupabaseConfigured, MemeRow } from '../utils/supabase';
 import { supabaseHealthCheck } from '../utils/healthCheck';
 
@@ -35,6 +36,7 @@ const CommunityFeed = () => {
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
   const [commentLoading, setCommentLoading] = useState<Record<string, boolean>>({});
   const [supabaseOnline, setSupabaseOnline] = useState<boolean | null>(null);
+  const [viewMode, setViewMode] = useState<'grid' | 'masonry'>('masonry');
 
   // Load memes from local storage as fallback
   const loadLocalMemes = () => {
@@ -295,52 +297,62 @@ const CommunityFeed = () => {
   ];
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 py-8 space-y-8">
-      <div className="text-center space-y-4">
-        <h2 className="text-4xl md:text-5xl font-bold text-gradient">
-          Community Memes
-        </h2>
-        <p className="text-gray-400 text-lg">
-          The funniest memes from our creative community
+    <div className="w-full max-w-6xl mx-auto px-4 py-8 space-y-8">
+      <div className="text-center space-y-6">
+        <div className="relative">
+          <h2 className="text-5xl md:text-6xl font-bold bg-gradient-to-r from-purple-400 via-pink-500 to-red-500 bg-clip-text text-transparent animate-pulse">
+            Community Hub
+          </h2>
+          <div className="absolute -top-2 -right-2 w-4 h-4 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full animate-bounce"></div>
+        </div>
+        <p className="text-gray-300 text-xl font-medium max-w-2xl mx-auto leading-relaxed">
+          Discover the funniest memes created by our amazing community of creators
         </p>
         
         {/* Supabase Status Indicator */}
         {isSupabaseConfigured && (
-          <div className="flex items-center justify-center gap-2 text-sm">
+          <div className="flex items-center justify-center">
             {supabaseOnline === true ? (
-              <div className="flex items-center gap-2 text-green-400">
-                <Wifi className="w-4 h-4" />
-                <span>Online Community Active</span>
+              <div className="flex items-center gap-3 px-4 py-2 bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/30 rounded-full backdrop-blur-sm">
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                <Wifi className="w-4 h-4 text-green-400" />
+                <span className="text-green-300 font-medium">Live Community</span>
               </div>
             ) : supabaseOnline === false ? (
-              <div className="flex items-center gap-2 text-orange-400">
-                <WifiOff className="w-4 h-4" />
-                <span>Online Community Offline - Using Local Storage</span>
+              <div className="flex items-center gap-3 px-4 py-2 bg-gradient-to-r from-orange-500/20 to-amber-500/20 border border-orange-500/30 rounded-full backdrop-blur-sm">
+                <div className="w-2 h-2 bg-orange-400 rounded-full"></div>
+                <WifiOff className="w-4 h-4 text-orange-400" />
+                <span className="text-orange-300 font-medium">Offline Mode</span>
               </div>
             ) : (
-              <div className="flex items-center gap-2 text-gray-400">
+              <div className="flex items-center gap-3 px-4 py-2 bg-gradient-to-r from-gray-500/20 to-slate-500/20 border border-gray-500/30 rounded-full backdrop-blur-sm">
                 <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                <span>Checking Connection...</span>
+                <span className="text-gray-300 font-medium">Connecting...</span>
               </div>
             )}
           </div>
         )}
         {(!isSupabaseConfigured || error.includes('Connection to online community failed')) && (
-          <div className="bg-blue-600/20 border border-blue-600/30 rounded-lg p-4 max-w-md mx-auto">
-            <p className="text-blue-300 text-sm">
-              💾 <strong>Local Mode:</strong> {error.includes('Connection to online community failed') 
-                ? 'Online community unavailable. Showing local memes.' 
-                : 'Showing memes saved on your device. Create memes and save them to see them here!'
-              }
-            </p>
-            <Button 
-              onClick={loadLocalMemes}
-              variant="outline"
-              size="sm"
-              className="mt-2"
-            >
-              🔄 Refresh
-            </Button>
+          <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/20 rounded-2xl p-6 max-w-lg mx-auto backdrop-blur-sm">
+            <div className="text-center space-y-4">
+              <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center mx-auto">
+                <span className="text-white text-xl">💾</span>
+              </div>
+              <p className="text-blue-200 text-sm font-medium">
+                <strong>Local Mode:</strong> {error.includes('Connection to online community failed') 
+                  ? 'Online community unavailable. Showing local memes.' 
+                  : 'Showing memes saved on your device. Create memes and save them to see them here!'
+                }
+              </p>
+              <Button 
+                onClick={loadLocalMemes}
+                variant="outline"
+                size="sm"
+                className="bg-gradient-to-r from-blue-500/20 to-purple-500/20 border-blue-400/30 hover:from-blue-500/30 hover:to-purple-500/30"
+              >
+                🔄 Refresh Local Memes
+              </Button>
+            </div>
           </div>
         )}
       </div>
@@ -359,77 +371,152 @@ const CommunityFeed = () => {
         )}
         
         <div className="flex items-center justify-between">
-          <div />
-          <div className="inline-flex bg-gray-800 rounded-full p-1">
+          {/* View Mode Toggle */}
+          <div className="inline-flex bg-gradient-to-r from-gray-800/50 to-gray-700/50 backdrop-blur-sm border border-gray-600/30 rounded-2xl p-1 shadow-lg">
             <button
-              className={`px-3 py-1 text-sm rounded-full ${sortBy === 'new' ? 'bg-purple-600 text-white' : 'text-gray-300'}`}
+              className={`px-4 py-2 text-sm font-medium rounded-xl transition-all duration-300 flex items-center gap-2 ${
+                viewMode === 'masonry' 
+                  ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/30' 
+                  : 'text-gray-300 hover:text-white hover:bg-gray-600/30'
+              }`}
+              onClick={() => setViewMode('masonry')}
+            >
+              <Grid3X3 className="w-4 h-4" />
+              Masonry
+            </button>
+            <button
+              className={`px-4 py-2 text-sm font-medium rounded-xl transition-all duration-300 flex items-center gap-2 ${
+                viewMode === 'grid' 
+                  ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/30' 
+                  : 'text-gray-300 hover:text-white hover:bg-gray-600/30'
+              }`}
+              onClick={() => setViewMode('grid')}
+            >
+              <List className="w-4 h-4" />
+              List
+            </button>
+          </div>
+
+          {/* Sort Options */}
+          <div className="inline-flex bg-gradient-to-r from-gray-800/50 to-gray-700/50 backdrop-blur-sm border border-gray-600/30 rounded-2xl p-1 shadow-lg">
+            <button
+              className={`px-6 py-3 text-sm font-medium rounded-xl transition-all duration-300 ${
+                sortBy === 'new' 
+                  ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/30' 
+                  : 'text-gray-300 hover:text-white hover:bg-gray-600/30'
+              }`}
               onClick={() => {
                 if (sortBy !== 'new') {
                   setSortBy('new');
                 }
               }}
             >
-              Newest
+              ✨ Newest
             </button>
             <button
-              className={`px-3 py-1 text-sm rounded-full ${sortBy === 'mostReacted' ? 'bg-purple-600 text-white' : 'text-gray-300'}`}
+              className={`px-6 py-3 text-sm font-medium rounded-xl transition-all duration-300 ${
+                sortBy === 'mostReacted' 
+                  ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/30' 
+                  : 'text-gray-300 hover:text-white hover:bg-gray-600/30'
+              }`}
               onClick={() => {
                 if (sortBy !== 'mostReacted') {
                   setSortBy('mostReacted');
                 }
               }}
             >
-              Most Reacted
+              🔥 Most Reacted
             </button>
             <button
-              className={`px-3 py-1 text-sm rounded-full ${sortBy === 'trending' ? 'bg-purple-600 text-white' : 'text-gray-300'}`}
+              className={`px-6 py-3 text-sm font-medium rounded-xl transition-all duration-300 ${
+                sortBy === 'trending' 
+                  ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/30' 
+                  : 'text-gray-300 hover:text-white hover:bg-gray-600/30'
+              }`}
               onClick={() => {
                 if (sortBy !== 'trending') {
                   setSortBy('trending');
                 }
               }}
             >
-              Trending
+              📈 Trending
             </button>
           </div>
         </div>
-        {memes.map((meme) => (
-          <Card key={meme.id} hover className="overflow-hidden">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-purple-600 to-pink-500 rounded-full flex items-center justify-center">
-                  <span className="text-white font-bold text-sm">
-                    {meme.author[0]}
-                  </span>
+        {viewMode === 'masonry' ? (
+          <Masonry
+            items={memes.map(meme => ({
+              id: meme.id,
+              img: meme.imageUrl,
+              height: 400 + Math.random() * 200, // Random heights for masonry effect
+              topText: meme.topText,
+              bottomText: meme.bottomText,
+              author: meme.author,
+              timestamp: meme.timestamp,
+              reactions: meme.reactions
+            }))}
+            ease="power3.out"
+            duration={0.6}
+            stagger={0.05}
+            animateFrom="bottom"
+            scaleOnHover={true}
+            hoverScale={0.95}
+            blurToFocus={true}
+            colorShiftOnHover={false}
+            onItemClick={(item) => {
+              // Navigate to meme detail page
+              window.location.hash = `meme/${item.id}`;
+            }}
+          />
+        ) : (
+          memes.map((meme) => (
+          <Card key={meme.id} hover className="overflow-hidden bg-gradient-to-br from-gray-800/50 to-gray-900/50 backdrop-blur-sm border border-gray-700/30 shadow-xl hover:shadow-2xl hover:shadow-purple-500/10 transition-all duration-500">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  <div className="w-12 h-12 bg-gradient-to-br from-purple-500 via-pink-500 to-red-500 rounded-full flex items-center justify-center shadow-lg">
+                    <span className="text-white font-bold text-lg">
+                      {meme.author[0].toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-gray-900"></div>
                 </div>
                 <div>
-                  <p className="font-semibold">{meme.author}</p>
-                  <p className="text-sm text-gray-400">{getTimeAgo(meme.timestamp)}</p>
+                  <p className="font-bold text-lg text-white">{meme.author}</p>
+                  <p className="text-sm text-gray-400 flex items-center gap-1">
+                    <span>🕒</span>
+                    {getTimeAgo(meme.timestamp)}
+                  </p>
                 </div>
               </div>
             </div>
 
-            <div className="relative bg-gray-900 rounded-lg overflow-hidden mb-4">
+            <div className="relative bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl overflow-hidden mb-6 shadow-2xl border border-gray-700/30">
               <img
                 src={meme.imageUrl}
                 alt="Community meme"
-                className="w-full h-auto"
+                className="w-full h-auto transition-transform duration-300 hover:scale-105"
               />
-              <div className="absolute top-0 left-0 right-0 p-4 text-center">
-                <p className="text-white text-2xl font-bold" style={{
-                  textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
+              <div className="absolute top-0 left-0 right-0 p-6 text-center">
+                <p className="text-white text-3xl font-black drop-shadow-2xl" style={{
+                  textShadow: '3px 3px 6px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.5)',
                   WebkitTextStroke: '2px black'
                 }}>
                   {meme.topText}
                 </p>
               </div>
-              <div className="absolute bottom-0 left-0 right-0 p-4 text-center">
-                <p className="text-white text-2xl font-bold" style={{
-                  textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
+              <div className="absolute bottom-0 left-0 right-0 p-6 text-center">
+                <p className="text-white text-3xl font-black drop-shadow-2xl" style={{
+                  textShadow: '3px 3px 6px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.5)',
                   WebkitTextStroke: '2px black'
                 }}>
                   {meme.bottomText}
                 </p>
+              </div>
+              <div className="absolute top-4 right-4">
+                <div className="bg-black/50 backdrop-blur-sm rounded-full px-3 py-1">
+                  <span className="text-white text-xs font-medium">🔥 Viral</span>
+                </div>
               </div>
             </div>
 
@@ -443,27 +530,25 @@ const CommunityFeed = () => {
                     <button
                       key={type}
                       onClick={() => handleReaction(meme.id, type)}
-                      className={`flex items-center gap-1 px-3 py-2 rounded-full transition-all duration-300 ${
+                      className={`flex items-center gap-2 px-4 py-3 rounded-2xl transition-all duration-300 transform hover:scale-105 ${
                         isActive
-                          ? 'bg-purple-600/20 scale-110'
-                          : 'bg-gray-800 hover:bg-gray-700'
+                          ? `bg-gradient-to-r ${color} text-white shadow-lg shadow-purple-500/30 scale-105`
+                          : 'bg-gradient-to-r from-gray-700/50 to-gray-600/50 hover:from-gray-600/50 hover:to-gray-500/50 text-gray-300 hover:text-white backdrop-blur-sm border border-gray-600/30'
                       }`}
                     >
-                      <Icon className={`w-4 h-4 ${isActive ? color : 'text-gray-400'}`} />
-                      <span className={`text-sm font-medium ${isActive ? 'text-white' : 'text-gray-400'}`}>
-                        {count}
-                      </span>
+                      <Icon className="w-5 h-5" />
+                      <span className="text-sm font-bold">{count}</span>
                     </button>
                   );
                 })}
               </div>
 
-              <div className="flex items-center gap-2">
-                <button className="p-2 rounded-full bg-gray-800 hover:bg-gray-700 transition-colors">
-                  <Download className="w-4 h-4 text-gray-400" />
+              <div className="flex items-center gap-3">
+                <button className="p-3 rounded-2xl bg-gradient-to-r from-blue-500/20 to-purple-500/20 hover:from-blue-500/30 hover:to-purple-500/30 border border-blue-500/30 hover:border-blue-400/50 transition-all duration-300 transform hover:scale-105 backdrop-blur-sm">
+                  <Download className="w-5 h-5 text-blue-400" />
                 </button>
                 <button 
-                  className="p-2 rounded-full bg-gray-800 hover:bg-gray-700 transition-colors"
+                  className="p-3 rounded-2xl bg-gradient-to-r from-green-500/20 to-emerald-500/20 hover:from-green-500/30 hover:to-emerald-500/30 border border-green-500/30 hover:border-green-400/50 transition-all duration-300 transform hover:scale-105 backdrop-blur-sm"
                   onClick={() => {
                     const url = `${window.location.origin}${window.location.pathname}#meme/${meme.id}`;
                     if (navigator.share) {
@@ -481,7 +566,7 @@ const CommunityFeed = () => {
                     }
                   }}
                 >
-                  <Share2 className="w-4 h-4 text-gray-400" />
+                  <Share2 className="w-5 h-5 text-green-400" />
                 </button>
                 <button
                   className="p-2 rounded-full bg-purple-600/20 hover:bg-purple-600/30 transition-colors"
@@ -557,7 +642,8 @@ const CommunityFeed = () => {
               )}
             </div>
           </Card>
-        ))}
+          ))
+        )}
         {loading && (
           <Card className="p-6 text-center text-gray-400">Loading…</Card>
         )}
@@ -565,28 +651,36 @@ const CommunityFeed = () => {
           <Card className="p-6 text-center text-red-400">{error}</Card>
         )}
         {!loading && !error && memes.length === 0 && (
-          <Card className="p-8 text-center">
-            <div className="space-y-4">
-              <div className="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center mx-auto">
-                <Sparkles className="w-8 h-8 text-gray-400" />
+          <Card className="p-12 text-center bg-gradient-to-br from-gray-800/30 to-gray-900/30 backdrop-blur-sm border border-gray-700/30">
+            <div className="space-y-8">
+              <div className="relative">
+                <div className="w-24 h-24 bg-gradient-to-br from-purple-500 via-pink-500 to-red-500 rounded-full flex items-center justify-center mx-auto shadow-2xl">
+                  <Sparkles className="w-12 h-12 text-white animate-pulse" />
+                </div>
+                <div className="absolute -top-2 -right-2 w-6 h-6 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full flex items-center justify-center">
+                  <span className="text-white text-xs">✨</span>
+                </div>
               </div>
-              <div>
-                <h3 className="text-xl font-semibold mb-2">No memes yet!</h3>
-                <p className="text-gray-400 mb-4">
+              <div className="space-y-4">
+                <h3 className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                  No memes yet!
+                </h3>
+                <p className="text-gray-300 text-lg max-w-md mx-auto leading-relaxed">
                   {!isSupabaseConfigured 
-                    ? "Create your first meme and save it to see it here!"
-                    : "Be the first to share a meme with the community!"
+                    ? "🎨 Create your first meme and save it to see it here!"
+                    : "🚀 Be the first to share a meme with the community!"
                   }
                 </p>
-                <div className="flex gap-3 justify-center">
+                <div className="flex gap-4 justify-center flex-wrap">
                   <Button 
                     onClick={() => {
                       window.location.hash = 'generate';
                       window.location.reload();
                     }}
                     variant="primary"
+                    className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 shadow-lg shadow-purple-500/30 transform hover:scale-105 transition-all duration-300"
                   >
-                    Create Your First Meme
+                    🎨 Create Your First Meme
                   </Button>
                   {!isSupabaseConfigured && (
                     <Button 
@@ -605,8 +699,9 @@ const CommunityFeed = () => {
                         loadLocalMemes(); // Reload the memes
                       }}
                       variant="outline"
+                      className="bg-gradient-to-r from-blue-500/20 to-purple-500/20 border-blue-400/30 hover:from-blue-500/30 hover:to-purple-500/30 backdrop-blur-sm"
                     >
-                      Add Test Meme
+                      🧪 Add Test Meme
                     </Button>
                   )}
                 </div>
