@@ -133,50 +133,105 @@ const MemeGenerator = ({ onMemeGenerated }: MemeGeneratorProps) => {
   };
 
   const handleSave = async () => {
-    if (!generatedMeme || !isSupabaseConfigured || !supabase) return;
+    if (!generatedMeme) return;
     setIsSaving(true);
     setErrorMsg('');
+    
     try {
-      const blob = uploadFile
-        ? await generateMemeBlobFromSource(uploadFile, topText, bottomText, style, positions)
-        : await generateMemeBlob(selectedTemplate, topText, bottomText, style, positions);
-      const fileName = `memes/${Date.now()}-${selectedTemplate.id}.png`;
-      const { data: storageData, error: storageError } = await supabase
-        .storage
-        .from('Public')
-        .upload(fileName, blob, { contentType: 'image/png', upsert: false });
-      if (storageError) throw storageError;
+      if (isSupabaseConfigured && supabase) {
+        try {
+          // Save to Supabase
+          const blob = uploadFile
+            ? await generateMemeBlobFromSource(uploadFile, topText, bottomText, style, positions)
+            : await generateMemeBlob(selectedTemplate, topText, bottomText, style, positions);
+          const fileName = `memes/${Date.now()}-${selectedTemplate.id}.png`;
+          const { data: storageData, error: storageError } = await supabase
+            .storage
+            .from('Public')
+            .upload(fileName, blob, { contentType: 'image/png', upsert: false });
+          if (storageError) throw storageError;
 
-      const { data: urlData } = supabase
-        .storage
-        .from('Public')
-        .getPublicUrl(storageData.path);
+          const { data: urlData } = supabase
+            .storage
+            .from('Public')
+            .getPublicUrl(storageData.path);
 
-      const { error: insertError } = await supabase
-        .from('memes')
-        .insert({
-          image_url: urlData.publicUrl,
-          top_text: topText,
-          bottom_text: bottomText
-        });
-      if (insertError) throw insertError;
+          const { error: insertError } = await supabase
+            .from('memes')
+            .insert({
+              image_url: urlData.publicUrl,
+              top_text: topText,
+              bottom_text: bottomText
+            });
+          if (insertError) throw insertError;
+          
+          alert('Saved to community!');
+        } catch (supabaseError) {
+          console.error('Supabase save failed, falling back to local storage:', supabaseError);
+          // Fall back to local storage if Supabase fails
+          throw new Error('SUPABASE_FALLBACK');
+        }
+      } else {
+        // Save to local storage as fallback
+        const newMeme = {
+          id: `local_${Date.now()}`,
+          imageUrl: generatedMeme,
+          topText: topText,
+          bottomText: bottomText,
+          author: 'You',
+          timestamp: new Date().toISOString(),
+          reactions: { laugh: 0, fire: 0, heart: 0, wow: 0 }
+        };
+        
+        const existingMemes = localStorage.getItem('memegen_local_memes');
+        const memes = existingMemes ? JSON.parse(existingMemes) : [];
+        memes.unshift(newMeme); // Add to beginning
+        localStorage.setItem('memegen_local_memes', JSON.stringify(memes));
+        
+        console.log('Saved meme to local storage:', newMeme);
+        console.log('All local memes:', memes);
+        alert('Saved to local community! (Note: This is stored locally on your device)');
+      }
       
       // Check if this is a challenge submission
       const challengeRaw = localStorage.getItem('memegen_challenge_context');
       if (challengeRaw) {
         try {
           const challenge = JSON.parse(challengeRaw);
-          // In a real app, you'd submit to a challenges_submissions table
           console.log('Challenge submission for:', challenge.title);
           alert(`Saved to community and submitted to "${challenge.title}" challenge!`);
           localStorage.removeItem('memegen_challenge_context');
         } catch {}
-      } else {
-        alert('Saved to community!');
       }
     } catch (e: any) {
       console.error(e);
-      setErrorMsg(e.message ?? 'Failed to save meme');
+      if (e.message === 'SUPABASE_FALLBACK') {
+        // Fall back to local storage
+        try {
+          const newMeme = {
+            id: `local_${Date.now()}`,
+            imageUrl: generatedMeme,
+            topText: topText,
+            bottomText: bottomText,
+            author: 'You',
+            timestamp: new Date().toISOString(),
+            reactions: { laugh: 0, fire: 0, heart: 0, wow: 0 }
+          };
+          
+          const existingMemes = localStorage.getItem('memegen_local_memes');
+          const memes = existingMemes ? JSON.parse(existingMemes) : [];
+          memes.unshift(newMeme); // Add to beginning
+          localStorage.setItem('memegen_local_memes', JSON.stringify(memes));
+          
+          console.log('Saved meme to local storage (fallback):', newMeme);
+          alert('Online community unavailable. Saved locally instead!');
+        } catch (localError) {
+          console.error('Local storage save also failed:', localError);
+          setErrorMsg('Failed to save meme both online and locally');
+        }
+      } else {
+        setErrorMsg(e.message ?? 'Failed to save meme');
+      }
     } finally {
       setIsSaving(false);
     }
@@ -578,16 +633,16 @@ const MemeGenerator = ({ onMemeGenerated }: MemeGeneratorProps) => {
                   onClick={handleSave}
                   variant="primary"
                   className="flex-1"
-                  disabled={isSaving || !isSupabaseConfigured}
-                  title={isSupabaseConfigured ? '' : 'Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env and restart'}
+                  disabled={isSaving}
+                  title={isSupabaseConfigured ? 'Save to online community' : 'Save to local community (stored on your device)'}
                 >
-                  {isSaving ? 'Saving…' : 'Save to Community'}
+                  {isSaving ? 'Saving…' : (isSupabaseConfigured ? 'Save to Community' : 'Save Locally')}
                 </Button>
               </div>
             )}
             {!isSupabaseConfigured && generatedMeme && (
               <p className="text-xs text-gray-400 mt-2">
-                To enable saving, create an .env with VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, then restart the dev server.
+                💾 Memes are saved locally on your device. To share with the online community, configure Supabase environment variables.
               </p>
             )}
           </Card>

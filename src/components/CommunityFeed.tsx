@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Heart, Flame, Laugh, Sparkles, Download, Share2, Wand2 } from 'lucide-react';
+import { Heart, Flame, Laugh, Sparkles, Download, Share2, Wand2, Wifi, WifiOff } from 'lucide-react';
 import Card from './Card';
 import Button from './Button';
 import { supabase, isSupabaseConfigured, MemeRow } from '../utils/supabase';
+import { supabaseHealthCheck } from '../utils/healthCheck';
 
 interface Meme {
   id: string;
@@ -33,12 +34,66 @@ const CommunityFeed = () => {
   const [commentsByMeme, setCommentsByMeme] = useState<Record<string, { id: string; author: string | null; content: string; created_at: string }[]>>({});
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
   const [commentLoading, setCommentLoading] = useState<Record<string, boolean>>({});
+  const [supabaseOnline, setSupabaseOnline] = useState<boolean | null>(null);
+
+  // Load memes from local storage as fallback
+  const loadLocalMemes = () => {
+    try {
+      console.log('Loading local memes...');
+      const localMemes = localStorage.getItem('memegen_local_memes');
+      console.log('Local memes from storage:', localMemes);
+      if (localMemes) {
+        const parsedMemes: Meme[] = JSON.parse(localMemes).map((m: any) => ({
+          ...m,
+          timestamp: new Date(m.timestamp)
+        }));
+        console.log('Parsed memes:', parsedMemes);
+        setMemes(parsedMemes);
+        setHasMore(false); // No pagination for local storage
+      } else {
+        console.log('No local memes found');
+        setMemes([]);
+        setHasMore(false);
+      }
+    } catch (error) {
+      console.error('Failed to load local memes:', error);
+      setMemes([]);
+      setHasMore(false);
+    }
+  };
 
   useEffect(() => {
-    if (!isSupabaseConfigured || !supabase) return;
+    console.log('CommunityFeed useEffect triggered, isSupabaseConfigured:', isSupabaseConfigured);
+    if (!isSupabaseConfigured || !supabase) {
+      console.log('Loading local memes as fallback');
+      setSupabaseOnline(false);
+      // Load from local storage as fallback
+      loadLocalMemes();
+      return;
+    }
+    console.log('Loading from Supabase');
+    setSupabaseOnline(true);
     void fetchPage(0, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sortBy]);
+
+  // Check Supabase status periodically
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
+    const checkStatus = async () => {
+      const isOnline = await supabaseHealthCheck.manualCheck();
+      setSupabaseOnline(isOnline);
+    };
+
+    // Check immediately
+    checkStatus();
+    
+    // Then check every 30 seconds
+    const interval = setInterval(checkStatus, 30000);
+    
+    return () => clearInterval(interval);
+  }, [isSupabaseConfigured]);
 
   const fetchPage = async (pageIndex: number, replace = false) => {
     if (!supabase) return;
@@ -82,7 +137,10 @@ const CommunityFeed = () => {
       setHasMore((data?.length ?? 0) === PAGE_SIZE);
       setPage(pageIndex);
     } catch (e: any) {
-      setError(e.message ?? 'Failed to load feed');
+      console.error('Supabase fetch failed, falling back to local storage:', e);
+      // If Supabase fails, fall back to local storage
+      loadLocalMemes();
+      setError('Connection to online community failed. Showing local memes instead.');
     } finally {
       setLoading(false);
     }
@@ -123,20 +181,38 @@ const CommunityFeed = () => {
     setMemes(newMemes);
     setUserReactions((prev) => ({ ...prev, [memeId]: nextType }));
 
-    // Persist only total to Supabase (mapped to laugh count in UI initially)
-    if (isSupabaseConfigured && supabase && delta !== 0) {
-      try {
-        const total = Object.values(reactionsObj).reduce((a, b) => a + b, 0);
-        const { error: updError } = await supabase
-          .from('memes')
-          .update({ reactions_count: total })
-          .eq('id', memeId);
-        if (updError) throw updError;
-      } catch (e) {
-        // rollback on error
-        setMemes(prevMemes);
-        setUserReactions(prevUserReactions);
-        console.error('Failed to update reaction:', e);
+    // Persist reactions
+    if (delta !== 0) {
+      if (isSupabaseConfigured && supabase) {
+        // Save to Supabase
+        try {
+          const total = Object.values(reactionsObj).reduce((a, b) => a + b, 0);
+          const { error: updError } = await supabase
+            .from('memes')
+            .update({ reactions_count: total })
+            .eq('id', memeId);
+          if (updError) throw updError;
+        } catch (e) {
+          // rollback on error
+          setMemes(prevMemes);
+          setUserReactions(prevUserReactions);
+          console.error('Failed to update reaction:', e);
+        }
+      } else {
+        // Save to local storage as fallback
+        try {
+          const updatedMemes = [...memes];
+          const memeIndex = updatedMemes.findIndex(m => m.id === memeId);
+          if (memeIndex !== -1) {
+            updatedMemes[memeIndex] = meme;
+            localStorage.setItem('memegen_local_memes', JSON.stringify(updatedMemes));
+          }
+        } catch (e) {
+          // rollback on error
+          setMemes(prevMemes);
+          setUserReactions(prevUserReactions);
+          console.error('Failed to save reaction locally:', e);
+        }
       }
     }
   };
@@ -227,9 +303,61 @@ const CommunityFeed = () => {
         <p className="text-gray-400 text-lg">
           The funniest memes from our creative community
         </p>
+        
+        {/* Supabase Status Indicator */}
+        {isSupabaseConfigured && (
+          <div className="flex items-center justify-center gap-2 text-sm">
+            {supabaseOnline === true ? (
+              <div className="flex items-center gap-2 text-green-400">
+                <Wifi className="w-4 h-4" />
+                <span>Online Community Active</span>
+              </div>
+            ) : supabaseOnline === false ? (
+              <div className="flex items-center gap-2 text-orange-400">
+                <WifiOff className="w-4 h-4" />
+                <span>Online Community Offline - Using Local Storage</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-gray-400">
+                <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                <span>Checking Connection...</span>
+              </div>
+            )}
+          </div>
+        )}
+        {(!isSupabaseConfigured || error.includes('Connection to online community failed')) && (
+          <div className="bg-blue-600/20 border border-blue-600/30 rounded-lg p-4 max-w-md mx-auto">
+            <p className="text-blue-300 text-sm">
+              💾 <strong>Local Mode:</strong> {error.includes('Connection to online community failed') 
+                ? 'Online community unavailable. Showing local memes.' 
+                : 'Showing memes saved on your device. Create memes and save them to see them here!'
+              }
+            </p>
+            <Button 
+              onClick={loadLocalMemes}
+              variant="outline"
+              size="sm"
+              className="mt-2"
+            >
+              🔄 Refresh
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="space-y-6">
+        {/* Debug info */}
+        {(!isSupabaseConfigured || error.includes('Connection to online community failed')) && (
+          <div className="bg-gray-800/50 rounded-lg p-3 text-xs text-gray-400">
+            <strong>Debug Info:</strong> Memes: {memes.length}, Loading: {loading.toString()}, Error: {error || 'None'}
+            {error.includes('Connection to online community failed') && (
+              <div className="mt-1 text-orange-400">
+                ⚠️ Supabase connection failed - using local storage fallback
+              </div>
+            )}
+          </div>
+        )}
+        
         <div className="flex items-center justify-between">
           <div />
           <div className="inline-flex bg-gray-800 rounded-full p-1">
@@ -435,6 +563,56 @@ const CommunityFeed = () => {
         )}
         {error && (
           <Card className="p-6 text-center text-red-400">{error}</Card>
+        )}
+        {!loading && !error && memes.length === 0 && (
+          <Card className="p-8 text-center">
+            <div className="space-y-4">
+              <div className="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center mx-auto">
+                <Sparkles className="w-8 h-8 text-gray-400" />
+              </div>
+              <div>
+                <h3 className="text-xl font-semibold mb-2">No memes yet!</h3>
+                <p className="text-gray-400 mb-4">
+                  {!isSupabaseConfigured 
+                    ? "Create your first meme and save it to see it here!"
+                    : "Be the first to share a meme with the community!"
+                  }
+                </p>
+                <div className="flex gap-3 justify-center">
+                  <Button 
+                    onClick={() => {
+                      window.location.hash = 'generate';
+                      window.location.reload();
+                    }}
+                    variant="primary"
+                  >
+                    Create Your First Meme
+                  </Button>
+                  {!isSupabaseConfigured && (
+                    <Button 
+                      onClick={() => {
+                        // Add a test meme for debugging
+                        const testMeme = {
+                          id: `test_${Date.now()}`,
+                          imageUrl: 'https://via.placeholder.com/400x400/6366f1/ffffff?text=Test+Meme',
+                          topText: 'Test Top Text',
+                          bottomText: 'Test Bottom Text',
+                          author: 'Test User',
+                          timestamp: new Date().toISOString(),
+                          reactions: { laugh: 0, fire: 0, heart: 0, wow: 0 }
+                        };
+                        localStorage.setItem('memegen_local_memes', JSON.stringify([testMeme]));
+                        loadLocalMemes(); // Reload the memes
+                      }}
+                      variant="outline"
+                    >
+                      Add Test Meme
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </Card>
         )}
       </div>
 

@@ -7,6 +7,7 @@ import CommunityFeed from './components/CommunityFeed';
 import ProfilePage from './components/ProfilePage';
 import ChallengesPage from './components/ChallengesPage';
 import MemePage from './components/MemePage';
+import { supabaseHealthCheck } from './utils/healthCheck';
 
 function App() {
   const [activeTab, setActiveTab] = useState<'home' | 'generate' | 'community' | 'profile' | 'challenges' | 'meme'>('home');
@@ -27,6 +28,16 @@ function App() {
     applyHash();
     window.addEventListener('hashchange', applyHash);
     return () => window.removeEventListener('hashchange', applyHash);
+  }, []);
+
+  // Start Supabase health checks when app loads
+  useEffect(() => {
+    supabaseHealthCheck.start();
+    
+    // Cleanup on unmount
+    return () => {
+      supabaseHealthCheck.stop();
+    };
   }, []);
 
   const renderContent = () => {
