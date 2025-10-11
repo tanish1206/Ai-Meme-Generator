@@ -11,16 +11,30 @@ export interface TemplateContext {
   templateName: string;
   currentTopText?: string;
   currentBottomText?: string;
+  imageUrl?: string; // For image analysis
 }
 
-// Free AI API options (choose one)
+export interface ImageAnalysis {
+  description: string;
+  objects: string[];
+  emotions: string[];
+  context: string;
+  memePotential: number; // 1-10 scale
+}
+
+// AI API configurations
 const AI_CONFIG = {
-  // Option 1: Hugging Face (free, no API key needed for some models)
+  // Gemini AI (Google) - for image analysis and text generation
+  gemini: {
+    apiUrl: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
+    visionUrl: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent'
+  },
+  // Hugging Face (free fallback)
   huggingFace: {
     model: 'microsoft/DialoGPT-medium',
     apiUrl: 'https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium'
   },
-  // Option 2: OpenAI (requires API key)
+  // OpenAI (fallback)
   openai: {
     model: 'gpt-3.5-turbo',
     apiUrl: 'https://api.openai.com/v1/chat/completions'
@@ -88,16 +102,98 @@ Generate 3 funny misidentification scenarios.`,
 Generate 3 funny Doge-style variations about programming, work, or life.`
 };
 
+// Analyze image using Gemini Vision
+export async function analyzeImageWithGemini(
+  imageUrl: string,
+  geminiApiKey: string
+): Promise<ImageAnalysis | null> {
+  try {
+    const response = await fetch(`${AI_CONFIG.gemini.visionUrl}?key=${geminiApiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            {
+              text: `Analyze this image for meme potential. Describe what you see, identify objects, emotions, and context. Rate the meme potential from 1-10. Return as JSON:
+              {
+                "description": "Brief description of the image",
+                "objects": ["list", "of", "objects"],
+                "emotions": ["list", "of", "emotions"],
+                "context": "What's happening in the image",
+                "memePotential": 8
+              }`
+            },
+            {
+              inline_data: {
+                mime_type: "image/jpeg",
+                data: await imageToBase64(imageUrl)
+              }
+            }
+          ]
+        }]
+      })
+    });
+
+    if (!response.ok) return null;
+    
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) return null;
+
+    // Extract JSON from response
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+  } catch (error) {
+    console.error('Gemini image analysis failed:', error);
+  }
+  return null;
+}
+
+// Convert image URL to base64
+async function imageToBase64(imageUrl: string): Promise<string> {
+  try {
+    const response = await fetch(imageUrl);
+    const blob = await response.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = reader.result as string;
+        resolve(base64.split(',')[1]); // Remove data:image/jpeg;base64, prefix
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch (error) {
+    console.error('Failed to convert image to base64:', error);
+    return '';
+  }
+}
+
 export async function getAISuggestion(
   context: TemplateContext,
-  apiKey?: string
+  geminiApiKey?: string
 ): Promise<AISuggestion | null> {
   try {
+    // If we have an image and Gemini API key, analyze the image first
+    if (context.imageUrl && geminiApiKey) {
+      const imageAnalysis = await analyzeImageWithGemini(context.imageUrl, geminiApiKey);
+      if (imageAnalysis) {
+        const suggestion = await generateImageBasedSuggestion(context, imageAnalysis, geminiApiKey);
+        if (suggestion) return suggestion;
+      }
+    }
+
+    // Fallback to text-based suggestions
     const prompt = generatePrompt(context);
     
-    // Try OpenAI first if API key provided (better quality)
-    if (apiKey) {
-      const suggestion = await tryOpenAI(prompt, apiKey);
+    // Try Gemini for text generation if API key provided
+    if (geminiApiKey) {
+      const suggestion = await tryGemini(prompt, geminiApiKey);
       if (suggestion) return suggestion;
     }
     
@@ -111,6 +207,99 @@ export async function getAISuggestion(
     console.error('AI suggestion failed:', error);
     return generateFallbackSuggestion(context);
   }
+}
+
+// Generate image-based suggestions using Gemini
+async function generateImageBasedSuggestion(
+  context: TemplateContext,
+  imageAnalysis: ImageAnalysis,
+  geminiApiKey: string
+): Promise<AISuggestion | null> {
+  try {
+    const templatePrompt = TEMPLATE_PROMPTS[context.templateId] || 'Create a funny meme text.';
+    
+    const prompt = `Based on this image analysis, create a funny meme text for the ${context.templateName} template.
+
+Image Analysis:
+- Description: ${imageAnalysis.description}
+- Objects: ${imageAnalysis.objects.join(', ')}
+- Emotions: ${imageAnalysis.emotions.join(', ')}
+- Context: ${imageAnalysis.context}
+- Meme Potential: ${imageAnalysis.memePotential}/10
+
+Template: ${templatePrompt}
+
+Generate ONE funny, relatable meme text that connects the image content with this template. Return ONLY the top and bottom text, separated by "|". Make it short, punchy, and meme-worthy. Format: "Top text" | "Bottom text"`;
+
+    const response = await fetch(`${AI_CONFIG.gemini.apiUrl}?key=${geminiApiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{ text: prompt }]
+        }]
+      })
+    });
+
+    if (!response.ok) return null;
+    
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) return null;
+
+    // Parse the response
+    const parts = text.split('|');
+    if (parts.length >= 2) {
+      return {
+        topText: parts[0].trim().replace(/"/g, ''),
+        bottomText: parts[1].trim().replace(/"/g, ''),
+        confidence: Math.min(0.9, 0.6 + (imageAnalysis.memePotential / 20)),
+        reasoning: `Based on image analysis: ${imageAnalysis.description}`
+      };
+    }
+  } catch (error) {
+    console.error('Gemini image-based suggestion failed:', error);
+  }
+  return null;
+}
+
+// Try Gemini API for text generation
+async function tryGemini(prompt: string, apiKey: string): Promise<AISuggestion | null> {
+  try {
+    const response = await fetch(`${AI_CONFIG.gemini.apiUrl}?key=${apiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{ text: prompt }]
+        }]
+      })
+    });
+
+    if (!response.ok) return null;
+    
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) return null;
+
+    // Parse the response
+    const parts = text.split('|');
+    if (parts.length >= 2) {
+      return {
+        topText: parts[0].trim().replace(/"/g, ''),
+        bottomText: parts[1].trim().replace(/"/g, ''),
+        confidence: 0.8,
+        reasoning: 'Gemini AI-generated suggestion'
+      };
+    }
+  } catch (error) {
+    console.error('Gemini API error:', error);
+  }
+  return null;
 }
 
 function generatePrompt(context: TemplateContext): string {

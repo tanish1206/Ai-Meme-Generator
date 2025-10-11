@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Sparkles, Loader2, RefreshCw, Copy, Check } from 'lucide-react';
 import Card from './Card';
 import Button from './Button';
@@ -9,7 +9,9 @@ interface AISuggestionsProps {
   templateName: string;
   currentTopText?: string;
   currentBottomText?: string;
+  imageUrl?: string; // For image analysis
   onApplySuggestion: (topText: string, bottomText: string) => void;
+  onSuggestionsChange?: (suggestions: AISuggestion[]) => void;
 }
 
 const AISuggestions = ({ 
@@ -17,28 +19,46 @@ const AISuggestions = ({
   templateName, 
   currentTopText, 
   currentBottomText, 
-  onApplySuggestion 
+  imageUrl,
+  onApplySuggestion,
+  onSuggestionsChange 
 }: AISuggestionsProps) => {
   const [suggestions, setSuggestions] = useState<AISuggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
+  // Notify parent component when suggestions change
+  useEffect(() => {
+    if (onSuggestionsChange) {
+      onSuggestionsChange(suggestions);
+    }
+  }, [suggestions, onSuggestionsChange]);
+
   const generateSuggestions = async () => {
     setLoading(true);
+    // Clear previous suggestions immediately when generating new ones
+    setSuggestions([]);
     try {
       const context: TemplateContext = {
         templateId,
         templateName,
         currentTopText,
-        currentBottomText
+        currentBottomText,
+        imageUrl
       };
 
       // Generate 3 unique suggestions
       const newSuggestions: AISuggestion[] = [];
       const usedSuggestions = new Set<string>();
       
+      // Get Gemini API key from environment
+      const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      
+      // Debug: Log API key status (first 10 chars only for security)
+      console.log('Gemini API Key available:', geminiApiKey ? `${geminiApiKey.substring(0, 10)}...` : 'Not found');
+      
       for (let i = 0; i < 3; i++) {
-        const suggestion = await getAISuggestion(context);
+        const suggestion = await getAISuggestion(context, geminiApiKey);
         if (suggestion) {
           const suggestionKey = `${suggestion.topText}|${suggestion.bottomText}`;
           if (!usedSuggestions.has(suggestionKey)) {
@@ -46,7 +66,7 @@ const AISuggestions = ({
             usedSuggestions.add(suggestionKey);
           } else {
             // If duplicate, try one more time
-            const retrySuggestion = await getAISuggestion(context);
+            const retrySuggestion = await getAISuggestion(context, geminiApiKey);
             if (retrySuggestion) {
               const retryKey = `${retrySuggestion.topText}|${retrySuggestion.bottomText}`;
               if (!usedSuggestions.has(retryKey)) {
@@ -59,6 +79,11 @@ const AISuggestions = ({
       }
 
       setSuggestions(newSuggestions);
+      
+      // Log success with API key status
+      if (newSuggestions.length > 0) {
+        console.log(`Successfully generated ${newSuggestions.length} suggestions using ${geminiApiKey ? 'Gemini API' : 'fallback methods'}`);
+      }
     } catch (error) {
       console.error('Failed to generate suggestions:', error);
     } finally {
@@ -82,6 +107,11 @@ const AISuggestions = ({
         <h4 className="font-semibold flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-purple-500" />
           AI Suggestions
+          {import.meta.env.VITE_GEMINI_API_KEY && (
+            <span className="text-xs bg-green-600/20 text-green-400 px-2 py-1 rounded-full">
+              Powered by Gemini
+            </span>
+          )}
         </h4>
         <Button
           onClick={generateSuggestions}

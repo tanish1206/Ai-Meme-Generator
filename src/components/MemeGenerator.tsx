@@ -9,6 +9,7 @@ import Input from './Input';
 import { recordMemeCreated } from '../utils/engagement';
 import { generateStoryFromSource } from '../utils/memeGenerator';
 import AISuggestions from './AISuggestions';
+import { AISuggestion } from '../utils/aiSuggestions';
 
 interface MemeGeneratorProps {
   onMemeGenerated?: (memeUrl: string) => void;
@@ -28,6 +29,7 @@ const MemeGenerator = ({ onMemeGenerated }: MemeGeneratorProps) => {
   const [dragging, setDragging] = useState<{ target: 'top' | 'bottom' | null; startX: number; startY: number } | null>(null);
   const [uploadPreviewUrl, setUploadPreviewUrl] = useState<string>('');
   const [templateQuery, setTemplateQuery] = useState('');
+  const [currentSuggestions, setCurrentSuggestions] = useState<AISuggestion[]>([]);
 
   useEffect(() => {
     const payloadRaw = localStorage.getItem('memegen_remix_payload');
@@ -388,10 +390,12 @@ const MemeGenerator = ({ onMemeGenerated }: MemeGeneratorProps) => {
                 templateName={selectedTemplate.name}
                 currentTopText={topText}
                 currentBottomText={bottomText}
+                imageUrl={uploadPreviewUrl || selectedTemplate.imageUrl}
                 onApplySuggestion={(top, bottom) => {
                   setTopText(top);
                   setBottomText(bottom);
                 }}
+                onSuggestionsChange={setCurrentSuggestions}
               />
               {errorMsg && (
                 <p className="text-red-400 text-sm">{errorMsg}</p>
@@ -480,6 +484,57 @@ const MemeGenerator = ({ onMemeGenerated }: MemeGeneratorProps) => {
                 />
               )}
             </div>
+
+            {/* AI Suggestions in Preview Tab */}
+            {currentSuggestions.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <h4 className="text-sm font-medium text-gray-300 flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-purple-500" />
+                  AI Suggestions
+                  {import.meta.env.VITE_GEMINI_API_KEY && (
+                    <span className="text-xs bg-green-600/20 text-green-400 px-2 py-1 rounded-full">
+                      Powered by Gemini
+                    </span>
+                  )}
+                </h4>
+                <div className="space-y-2">
+                  {currentSuggestions.map((suggestion, index) => (
+                    <div key={index} className="bg-gray-800/50 rounded-lg p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-400">
+                          Suggestion {index + 1} • {Math.round(suggestion.confidence * 100)}% confidence
+                        </span>
+                        <Button
+                          onClick={() => {
+                            setTopText(suggestion.topText);
+                            setBottomText(suggestion.bottomText);
+                          }}
+                          variant="secondary"
+                          size="sm"
+                        >
+                          Apply
+                        </Button>
+                      </div>
+                      
+                      <div className="space-y-1">
+                        <div className="text-sm font-medium text-white">
+                          "{suggestion.topText}"
+                        </div>
+                        <div className="text-sm font-medium text-white">
+                          "{suggestion.bottomText}"
+                        </div>
+                      </div>
+                      
+                      {suggestion.reasoning && (
+                        <div className="text-xs text-gray-400 italic">
+                          {suggestion.reasoning}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {generatedMeme && (
               <div className="flex gap-3 mt-4">
